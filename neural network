@@ -1,0 +1,48 @@
+#tensorflow2.5.0  python3.8.16
+import tensorflow as tf
+import numpy as np
+
+#数据预处理
+mnist = tf.keras.datasets.mnist
+(images_train,labels_train),(images_test,labels_test) = mnist.load_data()
+images_train = tf.expand_dims(images_train,-1)  #维度扩展为(60000,28,28,1)，进行卷积，60000是图片索引
+images_test = tf.expand_dims(images_test,-1)  #同上
+labels_train = np.float32(tf.keras.utils.to_categorical(labels_train,num_classes=10))  #one_hot处理，离散特征的取值扩展到了欧式空间
+labels_test = np.float32(tf.keras.utils.to_categorical(labels_test,num_classes=10))  #同上
+batch_size = 1024  #一次训练所抓取的数据样本数量
+train_dataset = tf.data.Dataset.from_tensor_slices((images_train,labels_train)).batch(batch_size).shuffle(batch_size*10)  #batch一次喂入神经网络的数据量，shuffle数据的混乱程度
+test_dataset = tf.data.Dataset.from_tensor_slices((images_test,labels_test)).batch(batch_size).shuffle(batch_size*10)
+
+#CNN结构
+input = tf.keras.Input([28,28,1])
+conv = tf.keras.layers.Conv2D(filters=64,kernel_size=3,padding="SAME",activation=tf.nn.relu)(input) #变为[28,28,64],SAME填充，激活函数为Rule
+conv = tf.keras.layers.MaxPool2D(pool_size=(2,2),strides=[2,2])(conv)  #Maxpool，变为[14,14,64]
+conv = tf.keras.layers.Conv2D(filters=128,kernel_size=3,padding="valid",activation=tf.nn.relu)(input) #变为[12,12,128],无填充，激活函数为Rule
+conv = tf.keras.layers.MaxPool2D(pool_size=(2,2),strides=[2,2])(conv)  #Maxpool，变为[6,6,128]
+conv = tf.keras.layers.Conv2D(filters=256,kernel_size=3,padding="SAME",activation=tf.nn.relu)(input) #变为[6,6,256],无填充，激活函数为Rule
+conv = tf.keras.layers.MaxPool2D(pool_size=(2,2),strides=[2,2])(conv)  #Maxpool，变为[3,3,256]
+#全连接层y
+flat = tf.keras.layers.Flatten()(conv)  #将卷积输出层数据转换为一维数据
+connect = tf.keras.layers.Dense(units=10,activation=tf.nn.softmax)(flat)  #全连接层，输出层10
+
+
+model = tf.keras.Model(inputs=input,outputs=connect)  #model是tf.keras.Model类
+model.compile(optimizer=tf.optimizers.Adam(0.0003),loss=tf.losses.categorical_crossentropy,metrics=['accuracy'])  #学习率0.0003
+model.fit(train_dataset,epochs=20)
+model.save("./model_test.h5")  #保存模型
+score = model.evaluate(test_dataset)
+print("last score:",score)
+
+""""
+超参数：1:filters(8->16),learningrate(0.0003),epochs(10),   loss=0.459 accuracy=0.947
+超参数：2:filters(32->64),learningrate(0.0003),epochs(10)   loss=0.138 accuracy=0.973
+超参数：3:filters(32->64),learningrate(0.0003),epochs(20)   loss=0.126 accuracy=0.978
+超参数：4:filters(32->64),learningrate(0.00003),epochs(20)   loss=0.282 accuracy=0.947   learningrate too small to convergent(try to add more epochs)
+超参数：5:filters(32->64),learningrate(0.00003),epochs(50)   loss=0.141 accuracy=0.971   ......QWQ add more filters?  
+超参数：6:filters(64->128),learningrate(0.0003),epochs(20)   loss=0.101 accuracy=0.981   continue add 
+超参数：7:filters(128->256),learningrate(0.0003),epochs(20)   loss=0.087 accuracy=0.983  add more conv layers
+超参数：8:filters(64->128->256),learningrate(0.0003),epochs(20)   loss=0.083 accuracy=0.983
+
+finily:conv->Maxpool(same)->conv->Maxpool(valid)->conv->Maxpool(same)->fully connected layer
+"""
+
